@@ -38,12 +38,6 @@ nb::class_<Circuit>(m, "Circuit", "Circuits are the main class added by KLay, an
 .def("print", &Circuit::print_circuit, "Print the circuit structure to stdout.")
 .def("_get_indices", &get_indices);
 
-// NOTE(Ibrahim):
-// get_indices isn't part of the Circuit class,
-// but is bound to it to maintain compatbility 
-// with the python side.
-// m.def("get_indices", &get_indices);
-
 nb::class_<SDNNFViolation>(m, "SDNNFViolation")
     .def_ro("property",  &SDNNFViolation::property)
     .def_ro("node_hash", &SDNNFViolation::node_hash)
