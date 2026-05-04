@@ -16,7 +16,13 @@ import os
 from pathlib import Path
 
 
-def to_torch_module(self: Circuit, semiring: str = "log", probabilistic: bool = False, eps: float = 0):
+def to_torch_module(self: Circuit,
+                    semiring: str = "log",
+                    probabilistic: bool = False,
+                    eps: float = 0,
+                    collapse: bool = False,
+                    merge: bool = False
+):
     """
     Convert the circuit into a PyTorch module.
 
@@ -28,16 +34,41 @@ def to_torch_module(self: Circuit, semiring: str = "log", probabilistic: bool = 
         we can interpret sum nodes as latent Categorical variables.
     :param eps:
         Epsilon used by log semiring for numerical stability.
+    :param collapse:
+        If True, remove identity (single-child pass-through) layers introduced
+        by klay's strict alternation. Reduces sequential depth without changing
+        results.
+    :param merge:
+        If True, merge consecutive same-type layers into one. Duplicates shared
+        sub-computations but minimizes sequential kernel launches, best for GPU.
+        Implies collapse=True.
     """
     from .torch.circuit_modules import ProbabilisticCircuitModule
     from .torch.circuit_modules import CircuitModule
-    indices = self._get_indices()
+    from .optimize import optimize_indices
+    ixs_in, ixs_out = self._get_indices()
+
+    layer_types = None
+    if collapse or merge:
+        ixs_in, ixs_out, layer_types = optimize_indices(
+            list(ixs_in), list(ixs_out), collapse=collapse, merge=merge
+        )
+
     if probabilistic:
-        return ProbabilisticCircuitModule(*indices, semiring=semiring, eps=eps)
-    return CircuitModule(*indices, semiring=semiring, eps=eps)
+        return ProbabilisticCircuitModule(ixs_in, ixs_out,
+                                          semiring=semiring,
+                                          eps=eps,
+                                          layer_types=layer_types)
+    return CircuitModule(ixs_in, ixs_out,
+                         semiring=semiring,
+                         eps=eps,
+                         layer_types=layer_types)
 
-
-def to_jax_function(self: Circuit, semiring: str = "log"):
+def to_jax_function(self: Circuit,
+                    semiring: str = "log",
+                    collapse: bool = False,
+                    merge: bool = False
+):
     """
     Convert the circuit into a Jax function.
 
@@ -45,8 +76,17 @@ def to_jax_function(self: Circuit, semiring: str = "log"):
         The semiring in which the circuit should be evaluated. Supported options are :code:`"log"`, :code:`"real"`, :code:`"mpe"`, or :code:`"godel"`.
     """
     from .jax import create_knowledge_layer
-    indices = self._get_indices()
-    return create_knowledge_layer(*indices, semiring=semiring)
+    from .optimize import optimize_indices
+    ixs_in, ixs_out = self._get_indices()
+    layer_types = None
+    if collapse or merge:
+        ixs_in, ixs_out, layer_types = optimize_indices(
+                list(ixs_in), list(ixs_out), collapse=collapse, merge=merge)
+
+    return create_knowledge_layer(ixs_in, ixs_out,
+                                  semiring=semiring,
+                                  layer_types=layer_types)
+
 
 
 def add_sdd(self: Circuit, sdd: "SddNode", true_lits: Sequence[int] = (), false_lits: Sequence[int] = ()) -> NodePtr:

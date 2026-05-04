@@ -1,12 +1,12 @@
 import torch
 from torch import nn
-
 from .layers import get_semiring, ProbabilisticCircuitLayer
 from .utils import unroll_ixs
 
 
 class CircuitModule(nn.Module):
-    def __init__(self, ixs_in, ixs_out, semiring: str = 'real', eps: float = 0):
+    def __init__(self, ixs_in, ixs_out, semiring: str = 'real', eps: float = 0,
+                 layer_types=None):
         super(CircuitModule, self).__init__()
         self.semiring = semiring
         self._eps = 0
@@ -19,7 +19,13 @@ class CircuitModule(nn.Module):
             ix_in = torch.as_tensor(ix_in, dtype=torch.long)
             ix_out = torch.as_tensor(ix_out, dtype=torch.long)
             ix_out = unroll_ixs(ix_out)
-            layer = self.prod_layer if i % 2 == 0 else self.sum_layer
+
+            if layer_types is not None:
+                is_prod = layer_types[i]
+            else:
+                is_prod = (i % 2 == 0)
+            layer = self.prod_layer if is_prod else self.sum_layer
+
             layers.append(layer(ix_in, ix_out, eps))
         self.layers = nn.Sequential(*layers)
 
@@ -39,6 +45,8 @@ class CircuitModule(nn.Module):
         sparse_params = sum(len(layer.ix_out) for layer in self.layers)
         layer_widths = [nb_vars] + [layer.out_shape[0] for layer in self.layers]
         dense_params = sum(layer_widths[i] * layer_widths[i + 1] for i in range(len(layer_widths) - 1))
+        if dense_params == 0:
+            return 0.0
         return sparse_params / dense_params
 
     def to_pc(self, x_pos, x_neg=None):

@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from klay.jax.semiring import get_semiring, encode_input
 
 
-def create_knowledge_layer(pointers, ix_outs, semiring):
+def create_knowledge_layer(pointers, ix_outs, semiring, layer_types=None):
     ixs_in = [np.array(ix_in) for ix_in in pointers]
     num_segments = [len(ix_out) - 1 for ix_out in ix_outs]  # needed for the jit
     ixs_out = [unroll_ix_out(np.array(ix_out, dtype=np.int32)) for ix_out in ix_outs]
@@ -17,10 +17,14 @@ def create_knowledge_layer(pointers, ix_outs, semiring):
     def wrapper(pos, neg=None):
         x = encoder(pos, neg)
         for i, (ix_in, ix_out) in enumerate(zip(ixs_in, ixs_out)):
-            if i % 2 == 0:
+            if layer_types is None:
+                layer_types = [i % 2 == 0 for i in range(len(ixs_in))]
+
+            if layer_types[i]:
                 x = prod_layer(num_segments[i], ix_in, ix_out, x)
             else:
                 x = sum_layer(num_segments[i], ix_in, ix_out, x)
+
         return x
 
     return wrapper
